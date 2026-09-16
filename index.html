@@ -146,28 +146,36 @@
             }
         });
 
-        // Función de simulación
+        // Formateador de fechas seguro
+        function formatDateTime(date) {
+            const year = date.getFullYear();
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            return `${year}-${month}-${day} ${hours}:${minutes}`;
+        }
+
+        // Función de simulación corregida
         function runSimulation() {
-            const rainEffect = parseFloat(rainInput.value) * 2.5; // Factor incremental por lluvia
+            const rainEffect = parseFloat(rainInput.value) * 2.5;
             const factorPercent = 1 + (parseFloat(factorInput.value) / 100);
             const hoursToProject = parseInt(hoursSelect.value);
             
-            const lastVal = historicalData[historicalData.length - 1].value;
+            const lastRecord = historicalData[historicalData.length - 1];
+            const baseValue = lastRecord.value;
+            const baseDate = new Date(lastRecord.datetime.replace(' ', 'T'));
+            
             const projectedData = [];
-
             const stepCount = hoursToProject / 6;
-            let currentBase = lastVal;
 
             for (let i = 1; i <= stepCount; i++) {
-                const hourOffset = i * 6;
-                const nextDate = new Date("2026-08-25T18:00:00");
-                nextDate.setHours(nextDate.getHours() + hourOffset);
+                const nextDate = new Date(baseDate.getTime() + (i * 6 * 60 * 60 * 1000));
+                const timeStr = formatDateTime(nextDate);
                 
-                const timeStr = nextDate.toISOString().replace('T', ' ').substring(0, 16);
-                
-                // Variación matemática base + variables simuladas
-                const simVal = (currentBase + (i * 12) + rainEffect) * factorPercent;
-                currentBase = simVal;
+                // Cálculo de tendencia estable + impacto directo de parámetros
+                const trend = i * 8; 
+                const simVal = (baseValue + trend + rainEffect) * factorPercent;
 
                 projectedData.push({
                     station: "Río Cauca La Virginia",
@@ -182,10 +190,14 @@
 
         // Actualizar UI
         function updateDashboard(projected) {
-            const allLabels = [...historicalData.map(d => d.datetime.split(' ')[1]), ...projected.map(d => d.datetime.split(' ')[1])];
+            // Etiquetas con día y hora para evitar confusión al cruzar medianoche
+            const allLabels = [
+                ...historicalData.map(d => d.datetime.substring(5)), 
+                ...projected.map(d => d.datetime.substring(5))
+            ];
+            
             const obsValues = historicalData.map(d => d.value);
             
-            // Alinear dataset simulado conectando con el último punto observado
             const simValues = new Array(historicalData.length - 1).fill(null);
             simValues.push(historicalData[historicalData.length - 1].value);
             projected.forEach(d => simValues.push(d.value));
@@ -200,13 +212,13 @@
             dataTable.innerHTML = fullList.map(row => `
                 <tr class="hover:bg-slate-700/30">
                     <td class="py-2 px-4">${row.station}</td>
-                    <td class="py-2 px-4">${row.datetime}</td>
+                    <td class="py-2 px-4 font-mono">${row.datetime}</td>
                     <td class="py-2 px-4">
                         <span class="px-2 py-0.5 rounded text-xs ${row.type === 'Observado' ? 'bg-sky-900/60 text-sky-300' : 'bg-rose-900/60 text-rose-300'}">
                             ${row.type}
                         </span>
                     </td>
-                    <td class="py-2 px-4 text-right font-mono">${row.value.toLocaleString('es-CO')}</td>
+                    <td class="py-2 px-4 text-right font-mono">${row.value.toLocaleString('es-CO', { minimumFractionDigits: 2 })}</td>
                 </tr>
             `).join('');
         }
