@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simulación Caudal Río Cauca - La Virginia</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen p-4 md:p-8 font-sans">
+    <div class="max-w-6xl mx-auto space-y-6">
+        
+        <!-- Header -->
+        <header class="border-b border-slate-700 pb-4">
+            <h1 class="text-2xl md:text-3xl font-bold text-sky-400">Simulador Hidrológico: Río Cauca</h1>
+            <p class="text-slate-400 text-sm md:text-base">Estación La Virginia, Risaralda</p>
+        </header>
+
+        <!-- Main Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            
+            <!-- Panel de Controles -->
+            <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 space-y-5 h-fit">
+                <h2 class="text-lg font-semibold text-slate-200 border-b border-slate-700 pb-2">Parámetros de Simulación</h2>
+                
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">
+                        Precipitación en Cuenca Alta (mm/h): <span id="rainVal" class="text-sky-400 font-bold">0</span>
+                    </label>
+                    <input type="range" id="rainInput" min="0" max="100" value="0" step="5" class="w-full accent-sky-500 bg-slate-700 rounded-lg cursor-pointer">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">
+                        Ajuste por Afluentes (%): <span id="factorVal" class="text-sky-400 font-bold">0%</span>
+                    </label>
+                    <input type="range" id="factorInput" min="-20" max="50" value="0" step="1" class="w-full accent-sky-500 bg-slate-700 rounded-lg cursor-pointer">
+                </div>
+
+                <div>
+                    <label class="block text-sm font-medium text-slate-300 mb-1">Horizonte de Proyección</label>
+                    <select id="hoursSelect" class="w-full bg-slate-700 text-white border border-slate-600 rounded-lg p-2 focus:ring-2 focus:ring-sky-500">
+                        <option value="12">12 Horas</option>
+                        <option value="24" selected>24 Horas</option>
+                        <option value="36">36 Horas</option>
+                    </select>
+                </div>
+
+                <button id="resetBtn" class="w-full py-2 bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium rounded-lg transition">
+                    Restablecer Simulación
+                </button>
+            </div>
+
+            <!-- Gráfico principal -->
+            <div class="lg:col-span-2 bg-slate-800 p-5 rounded-xl border border-slate-700">
+                <div class="flex justify-between items-center mb-4">
+                    <h2 class="text-lg font-semibold text-slate-200">Caudal Observado vs. Proyección</h2>
+                    <span class="text-xs bg-sky-900/60 text-sky-300 px-2.5 py-1 rounded-full border border-sky-700">m³/s</span>
+                </div>
+                <div class="relative w-full h-[320px] sm:h-[380px]">
+                    <canvas id="caudalChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tabla de Datos -->
+        <div class="bg-slate-800 p-5 rounded-xl border border-slate-700 overflow-x-auto">
+            <h2 class="text-lg font-semibold text-slate-200 mb-3">Registros e Histórico de Simulación</h2>
+            <table class="w-full text-left text-sm text-slate-300">
+                <thead class="bg-slate-700/50 text-slate-400 uppercase text-xs">
+                    <tr>
+                        <th class="py-2.5 px-4">Estación</th>
+                        <th class="py-2.5 px-4">Fecha / Hora</th>
+                        <th class="py-2.5 px-4">Tipo</th>
+                        <th class="py-2.5 px-4 text-right">Caudal (m³/s)</th>
+                    </tr>
+                </thead>
+                <tbody id="dataTable" class="divide-y divide-slate-700">
+                    <!-- Filas dinámicas -->
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+
+    <script>
+        // Datos Observados
+        const historicalData = [
+            { station: "Río Cauca La Virginia", datetime: "2026-08-24 06:00", value: 1162.18, type: "Observado" },
+            { station: "Río Cauca La Virginia", datetime: "2026-08-24 12:00", value: 1173.05, type: "Observado" },
+            { station: "Río Cauca La Virginia", datetime: "2026-08-24 18:00", value: 1108.83, type: "Observado" },
+            { station: "Río Cauca La Virginia", datetime: "2026-08-25 06:00", value: 1213.33, type: "Observado" },
+            { station: "Río Cauca La Virginia", datetime: "2026-08-25 12:00", value: 1265.22, type: "Observado" },
+            { station: "Río Cauca La Virginia", datetime: "2026-08-25 18:00", value: 1228.10, type: "Observado" }
+        ];
+
+        // Elementos DOM
+        const rainInput = document.getElementById('rainInput');
+        const factorInput = document.getElementById('factorInput');
+        const hoursSelect = document.getElementById('hoursSelect');
+        const rainVal = document.getElementById('rainVal');
+        const factorVal = document.getElementById('factorVal');
+        const resetBtn = document.getElementById('resetBtn');
+        const dataTable = document.getElementById('dataTable');
+
+        // Inicialización Chart.js
+        const ctx = document.getElementById('caudalChart').getContext('2d');
+        let chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: [],
+                datasets: [
+                    {
+                        label: 'Caudal Observado',
+                        data: [],
+                        borderColor: '#38bdf8',
+                        backgroundColor: '#38bdf820',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        pointRadius: 4,
+                        fill: false
+                    },
+                    {
+                        label: 'Proyección Simulación',
+                        data: [],
+                        borderColor: '#f43f5e',
+                        backgroundColor: '#f43f5e20',
+                        borderWidth: 2,
+                        borderDash: [5, 5],
+                        tension: 0.3,
+                        pointRadius: 4,
+                        fill: false
+                    }
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { labels: { color: '#94a3b8' } }
+                },
+                scales: {
+                    x: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } },
+                    y: { ticks: { color: '#94a3b8' }, grid: { color: '#334155' } }
+                }
+            }
+        });
+
+        // Función de simulación
+        function runSimulation() {
+            const rainEffect = parseFloat(rainInput.value) * 2.5; // Factor incremental por lluvia
+            const factorPercent = 1 + (parseFloat(factorInput.value) / 100);
+            const hoursToProject = parseInt(hoursSelect.value);
+            
+            const lastVal = historicalData[historicalData.length - 1].value;
+            const projectedData = [];
+
+            const stepCount = hoursToProject / 6;
+            let currentBase = lastVal;
+
+            for (let i = 1; i <= stepCount; i++) {
+                const hourOffset = i * 6;
+                const nextDate = new Date("2026-08-25T18:00:00");
+                nextDate.setHours(nextDate.getHours() + hourOffset);
+                
+                const timeStr = nextDate.toISOString().replace('T', ' ').substring(0, 16);
+                
+                // Variación matemática base + variables simuladas
+                const simVal = (currentBase + (i * 12) + rainEffect) * factorPercent;
+                currentBase = simVal;
+
+                projectedData.push({
+                    station: "Río Cauca La Virginia",
+                    datetime: timeStr,
+                    value: parseFloat(simVal.toFixed(2)),
+                    type: "Simulado"
+                });
+            }
+
+            updateDashboard(projectedData);
+        }
+
+        // Actualizar UI
+        function updateDashboard(projected) {
+            const allLabels = [...historicalData.map(d => d.datetime.split(' ')[1]), ...projected.map(d => d.datetime.split(' ')[1])];
+            const obsValues = historicalData.map(d => d.value);
+            
+            // Alinear dataset simulado conectando con el último punto observado
+            const simValues = new Array(historicalData.length - 1).fill(null);
+            simValues.push(historicalData[historicalData.length - 1].value);
+            projected.forEach(d => simValues.push(d.value));
+
+            chart.data.labels = allLabels;
+            chart.data.datasets[0].data = [...obsValues, ...new Array(projected.length).fill(null)];
+            chart.data.datasets[1].data = simValues;
+            chart.update();
+
+            // Render Tabla
+            const fullList = [...historicalData, ...projected];
+            dataTable.innerHTML = fullList.map(row => `
+                <tr class="hover:bg-slate-700/30">
+                    <td class="py-2 px-4">${row.station}</td>
+                    <td class="py-2 px-4">${row.datetime}</td>
+                    <td class="py-2 px-4">
+                        <span class="px-2 py-0.5 rounded text-xs ${row.type === 'Observado' ? 'bg-sky-900/60 text-sky-300' : 'bg-rose-900/60 text-rose-300'}">
+                            ${row.type}
+                        </span>
+                    </td>
+                    <td class="py-2 px-4 text-right font-mono">${row.value.toLocaleString('es-CO')}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Listeners
+        rainInput.addEventListener('input', (e) => {
+            rainVal.textContent = e.target.value;
+            runSimulation();
+        });
+
+        factorInput.addEventListener('input', (e) => {
+            factorVal.textContent = `${e.target.value}%`;
+            runSimulation();
+        });
+
+        hoursSelect.addEventListener('change', runSimulation);
+
+        resetBtn.addEventListener('click', () => {
+            rainInput.value = 0;
+            factorInput.value = 0;
+            hoursSelect.value = 24;
+            rainVal.textContent = "0";
+            factorVal.textContent = "0%";
+            runSimulation();
+        });
+
+        // Inicio
+        runSimulation();
+    </script>
+</body>
+</html>
